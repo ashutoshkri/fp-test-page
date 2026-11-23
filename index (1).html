@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FP test page</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 640px;
+        margin: 40px auto;
+        padding: 0 16px;
+        color: #222;
+      }
+      h1 {
+        font-size: 20px;
+      }
+      .muted {
+        color: #666;
+        font-size: 14px;
+      }
+      pre {
+        background: #f4f4f4;
+        padding: 12px;
+        border-radius: 6px;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+      .ok {
+        color: #137333;
+      }
+      .err {
+        color: #b3261e;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Fingerprint test page</h1>
+    <p class="muted">
+      Used to compare link-checking tools. Open with
+      <code>?tool=old&amp;row=1</code> or <code>?tool=new&amp;row=1</code>.
+    </p>
+    <p id="status">Running Fingerprint check…</p>
+    <pre id="out"></pre>
+
+    <script type="module">
+      // ── Settings ─────────────────────────────────────────────
+      // PUBLIC key only (it is meant to be in web pages). Never put the
+      // Secret key here: this page is public.
+      const FINGERPRINT_PUBLIC_KEY = "xB5UXSx6LtQ7uZp6YhYX";
+      const REGION = "ap"; // must match the workspace region: us, eu or ap
+      // ─────────────────────────────────────────────────────────
+
+      const params = new URLSearchParams(location.search);
+      const tool = (params.get("tool") || "unknown").slice(0, 40);
+      const row = (params.get("row") || "").slice(0, 20);
+      // linkedId shows on every event in the Fingerprint dashboard and export,
+      // so the two tools' runs can be told apart: e.g. "old-row-3".
+      const linkedId = row ? `${tool}-row-${row}` : tool;
+
+      const status = document.getElementById("status");
+      const out = document.getElementById("out");
+
+      try {
+        const Fingerprint = await import(
+          `https://fpjscdn.net/v4/${PUBLIC_KEY}`
+        );
+        const fp = await Fingerprint.start({ region: REGION });
+        // Give the agent time to collect its signals before identifying.
+        await new Promise((r) => setTimeout(r, 1200));
+        const result = await fp.get({ linkedId });
+
+        status.textContent = "Done";
+        status.className = "ok";
+        out.textContent = JSON.stringify(
+          {
+            tool,
+            row,
+            linkedId,
+            event_id: result.event_id ?? result.requestId,
+            visitor_id: result.visitor_id ?? result.visitorId,
+            suspect_score: result.suspect_score,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            language: navigator.language,
+            platform: navigator.platform,
+            userAgent: navigator.userAgent,
+            checkedAt: new Date().toISOString(),
+          },
+          null,
+          2,
+        );
+        document.title = "FP done";
+      } catch (e) {
+        status.textContent = "Fingerprint check failed: " + (e?.message ?? e);
+        status.className = "err";
+        document.title = "FP failed";
+      }
+    </script>
+  </body>
+</html>
